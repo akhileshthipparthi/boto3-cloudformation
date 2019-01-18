@@ -5,8 +5,8 @@ Takes a parmater file(refere sample here) as input and performs operations like 
 
 Below properties are mandatory in paramater file. Tags are optional and remaining properties are passed as Template properties if given as key value pair.
 
-"RegionId"\n
-"TemplateUrl"\n
+"RegionId"
+"TemplateUrl"
 "StackName"
  
 
