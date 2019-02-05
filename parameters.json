@@ -1,6 +1,6 @@
 {
     "RegionId": "us-west-2", 
-    "TemplateUrl": "{S3 url of template", 
+    "TemplateUrl": "{S3 url of template}", 
     "StackName": "myec2",
     "InstanceAMI":"ami-28e07e50",
     "Tags": [{
