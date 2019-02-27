@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
-from termcolor import colored
 from botocore.exceptions import ClientError
 import argparse
 import json
 import sys
-import subprocess
 import os
 import boto3
 from retrying import retry
@@ -22,8 +20,10 @@ transition_states = [
     'UPDATE_ROLLBACK_IN_PROGRESS',
     'REVIEW_IN_PROGRESS']
 
-update_states = ['CREATE_COMPLETE', 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE']
-delete_states = ['ROLLBACK_COMPLETE', 'ROLLBACK_FAILED', 'DELETE_FAILED', 'DELETE_COMPLETE']
+update_states = ['CREATE_COMPLETE',
+                 'UPDATE_COMPLETE', 'UPDATE_ROLLBACK_COMPLETE']
+delete_states = ['ROLLBACK_COMPLETE', 'ROLLBACK_FAILED',
+                 'DELETE_FAILED', 'DELETE_COMPLETE']
 
 # boto3.set_stream_logger('botocore', level=boto3.logging.DEBUG)
 
@@ -38,8 +38,7 @@ def wait_for_complete(cft_client, cft_stack_name):
         stack_status = get_stack_status(cft_client, cft_stack_name)
         if stack_status not in transition_states:
             return stack_status
-        print(
-            colored(f"StackStatus of {cft_stack_name} # {stack_status}.Waiting till state changes", 'green'))
+        print(f'StackStatus of {cft_stack_name} : {stack_status}.Waiting till State changes ..... ')
 
     status = wait_loop()
 
@@ -50,12 +49,8 @@ def get_stack_status(cft_client, cft_stack_name):
 
     paginator = cft_client.get_paginator('describe_stacks')
 
-    response_iterator = paginator.paginate(
-        PaginationConfig={
-            'MaxItems': 1000
-        }
-    )
-    for response in response_iterator:
+    stack_iterator = paginator.paginate()
+    for response in stack_iterator:
         for stack in response['Stacks']:
             if cft_stack_name == stack['StackName']:
                 return stack['StackStatus']
@@ -66,7 +61,7 @@ def get_stack_status(cft_client, cft_stack_name):
 def role_arn_to_session(role_arn, session_name):
 
     lab = boto3.Session(profile_name='default')
-    #role_arn = "arn:aws:iam::" + account_id + ":role/" + role_name
+    # role_arn = "arn:aws:iam::" + account_id + ":role/" + role_name
     client = lab.client('sts', verify=False)
     response = client.assume_role(
         RoleArn=role_arn,
@@ -91,13 +86,19 @@ def cft_create_stack(role, parameter_data, cft_params):
 
     if current_stack_status:
         if current_stack_status not in transition_states and current_stack_status in update_states:
-            print(f"{cft_stack_name} will be UPDATED due to its current statue -->  {current_stack_status}")
+            print(
+                f"{cft_stack_name} will be UPDATED due to its current statue -->  {current_stack_status}")
+
             cft_update_stack(cft_client, cft_stack_name, parameter_data, cft_params)
+
         else:
             print(f"{cft_stack_name} Stack exists and couldnt be UPDATED due to its current transition/failed state --> {current_stack_status}.")
+
         if current_stack_status in delete_states:
             print(f"{cft_stack_name} will be DELETED due to its current state")
+
             cft_delete_stack(cft_client, cft_stack_name, parameter_data, cft_params)
+
     else:
         print(f"{cft_stack_name} being CREATED")
         try:
@@ -112,11 +113,12 @@ def cft_create_stack(role, parameter_data, cft_params):
 
             if response['ResponseMetadata']['HTTPStatusCode'] == 200:
 
-                stack_completion_status = wait_for_complete(cft_client, cft_stack_name)
+                stack_completion_status = wait_for_complete(
+                    cft_client, cft_stack_name)
 
                 if stack_completion_status == 'CREATE_COMPLETE':
-                    print(colored(
-                        f"{cft_stack_name} Stack CREATED successfully.Current State {stack_completion_status}", 'green'))
+                    print(
+                        f'{cft_stack_name} Stack CREATED successfully.Current State {stack_completion_status}')
                 else:
                     for event in cft_client.describe_stack_events(StackName=cft_stack_name)['StackEvents']:
                         del event['Timestamp']
@@ -124,10 +126,9 @@ def cft_create_stack(role, parameter_data, cft_params):
                     raise Exception(
                         f"ERROR: {cft_stack_name} Stack Couldn't be CREATED.Current State {stack_completion_status}.Stack Events logged")
             else:
-                print(f"{cft_stack_name} Stack Couldnt be CREATED.Error Calling API {json.dumps(response)}")
+                print(
+                    f"{cft_stack_name} Stack Couldnt be CREATED.Error Calling API {json.dumps(response)}")
 
-        except ClientError as e:
-            raise Exception("ERROR: Client Exception CREATING Stack", e)
         except Exception as e:
             raise Exception("ERROR: Exception CREATING Stack", e)
 
@@ -148,8 +149,8 @@ def cft_update_stack(cft_client, stack_name, parameter_data, cft_params):
 
             if stack_completion_status == 'UPDATE_COMPLETE':
 
-                print(colored(
-                    f"{stack_name} Stack UPDATED successfully.Current State {stack_completion_status}", 'green'))
+                print(
+                    f'{stack_name} Stack UPDATED successfully.Current State {stack_completion_status}')
             else:
                 for event in cft_client.describe_stack_events(StackName=stack_name)['StackEvents']:
                     del event['Timestamp']
@@ -162,13 +163,13 @@ def cft_update_stack(cft_client, stack_name, parameter_data, cft_params):
                 f"ERROR: {stack_name} Stack Couldnt be UPDATED.Error Calling API {json.dumps(response)}")
 
     except ClientError as e:
-            if e.response['Error']['Message']=='No updates are to be performed.':
-                print(f'Stack {stack_name}  Already Updated.Nothing to update')
-            else:
-                raise Exception(f"ERROR: Exception UPDATING Stack {stack_name} {e}")
+        if e.response['Error']['Message'] == 'No updates are to be performed.':
+            print(f'Stack {stack_name}  Already Updated.Nothing to update')
+        else:
+            raise Exception(
+                f"ERROR: Exception UPDATING Stack {stack_name} {e}")
     except Exception as e:
-            raise Exception(f"ERROR: Exception UPDATING Stack {stack_name} {e}")
-
+        raise Exception(f"ERROR: Exception UPDATING Stack {stack_name} :: {e}")
 
 
 def cft_delete_stack(cft_client, stack_name, parameter_data, cft_params):
@@ -181,18 +182,19 @@ def cft_delete_stack(cft_client, stack_name, parameter_data, cft_params):
             stack_completion_status = wait_for_complete(cft_client, stack_name)
 
             if not stack_completion_status:
-                print(colored(f"{stack_name} Stack DELETED successfully.", 'green'))
+                print(f'{stack_name} Stack DELETED successfully')
             else:
                 raise Exception(
                     f"ERROR: {stack_name} Stack Couldn't be DELETED.Check Stack Events.")
 
-    except ClientError as e:
+    except Exception as e:
         raise Exception(f"ERROR: {stack_name} Stack Couldn't be DELETED.")
 
 
 def cft_validate_stack(cft_client, cft_stack_name, parameter_data, cft_params):
 
-    print(f'Validating Stack {cft_stack_name} template for any Validation errors')
+    print(
+        f'Validating Stack {cft_stack_name} template for any Validation errors')
     try:
         response = cft_client.validate_template(
             TemplateURL=parameter_data['TemplateUrl']
@@ -212,7 +214,8 @@ def parse_parameters(param_file):
         if all(k in parameter_data for k in mandatory_params):
             for k in parameter_data.keys():
                 if k not in mandatory_params and k != 'Tags':
-                    cft_params.append({"ParameterKey": k, "ParameterValue": parameter_data[k]})
+                    cft_params.append(
+                        {"ParameterKey": k, "ParameterValue": parameter_data[k]})
             return parameter_data, cft_params
         else:
             sys.exit(
@@ -225,7 +228,8 @@ def parse_parameters(param_file):
 
 def main():
 
-    parser = argparse.ArgumentParser(description='Deployment script parameters')
+    parser = argparse.ArgumentParser(
+        description='Deployment script parameters')
 
     parser.add_argument(
         '-p',
